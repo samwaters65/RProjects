@@ -1,0 +1,144 @@
+
+###########################################################
+#                                                         #
+# Purpose:                                                #
+#	Generate dynamic reports based on frequently          #
+#	refreshed data in order to be transmitted to account  #
+#	managers.                                             #
+#                                                         #
+###########################################################
+
+
+---
+title: "`r paste0(' Summary - ', ident)`"
+date: "`r Sys.Date()`"
+output: 
+  pdf_document: 
+    latex_engine: xelatex
+---
+
+```{r setup, message = F, warning = F, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(ggplot2)
+library(magrittr)
+library(dplyr)
+```
+
+# Category Top Line Statistics
+
+**Metric** | **Prior 3 Months**
+------------ | -------------
+Total Tickets   | `r sum(obj1$TTLTicketCt[obj1$Ident == ident])`  
+Open Tickets | `r sum(obj1$OpenTicketCt[obj1$Ident == ident])`
+% Tickets Open | `r paste0(mean(obj1$PercOpen[obj1$Ident == ident]),'%')`
+Tickets Open >48 Hours | `r sum(obj1$TicketsOpen48hrs[obj1$Ident == ident])`
+Avg Days to Close | `r mean(obj1$AvgDTC[obj1$Ident == ident])`
+Avg Days to Deliver | `r mean(obj1$AvgDTD[obj1$Ident == ident])`
+Tickets Opened Prior Wk | `r obj1$TTLTicketPriorWk[obj1$Ident == ident]`
+Vendor of Concern | `r obj1$VendorOfConcern[obj1$Ident == ident]`
+
+Vendors' response times are **`r if(mean(obj1$AvgDTC[obj1$Ident == ident]) > mean(obj2$ChainDTC[obj2$Ident == ident])*1.1) {"much slower"} else if (mean(obj1$AvgDTC[obj1$Ident == ident]) >= mean(obj2$ChainDTC[obj2$Ident == ident])) {"slightly slower"} else if (mean(obj1$AvgDTC[obj1$Ident == ident]) < mean(obj2$ChainDTC[obj2$Ident == ident])*0.9) {"much faster"} else {"slightly faster"}`**  than the chain average (`r mean(obj1$AvgDTC[obj1$Ident == ident])` days vs `r round(mean(obj2$ChainDTC[obj2$Ident == ident]),1)` days). **`r obj1$NationalCustomerName[obj1$Ident == ident]`** has **`r sum(obj1$TicketsOpen48hrs[obj1$Ident == ident])`** tickets open more than 48 hours and **`r sum(obj1$OpenTickets2Wks[obj1$Ident == ident])`** tickets older than 2 weeks.
+
+# Closure Rate - L12W
+
+```{r}
+int <- Sys.Date() - 42
+maxDater <- max(obj2$Weeks)
+recent <- filter(filter(filter(obj2, Ident == ident), Weeks > int), Weeks < maxDater)
+old <- filter(filter(obj2, Ident == ident), Weeks < int)
+```
+
+Ticket Closure Rate for the prior 12 weeks is **`r if(mean(obj1$PercOpen[obj1$Ident == ident]) > (100-mean(obj2$ChainPercClosed[obj2$Ident == ident])*1.1)) {"much lower"} else if (mean(obj1$PercOpen[obj1$Ident == ident]) > (100 - mean(obj2$ChainPercClosed[obj2$Ident == ident]))) {"slightly lower"} else if (mean(obj1$PercOpen[obj1$Ident == ident]) < (100 - mean(obj2$ChainDTC[obj2$Ident == ident])*0.9)) {"slightly higher"} else {"much higher"}`** vs the chain average.
+
+```{r fig.width=7, fig.height=4, echo=FALSE}
+avgline <- mean(filter(obj2, Ident == ident)$ChainPercClosed)
+
+filter(obj2, Ident == ident) %>% ggplot(aes(x = Weeks, y = CatPercClosed, label = round(CatPercClosed,1), group = 1))+
+geom_line(aes(color = "Closure Rate")) +
+geom_point() + 
+geom_text(size=3,vjust = 0, nudge_y = 5, angle = 45) +
+geom_hline(yintercept = avgline, color = "blue") +
+ggtitle("Closure Rate - L12W") + 
+ylab("Closure Rate %") +
+labs(colour = "Metric") +
+theme(axis.text.y=element_text(size=10), axis.title=element_text(size=12,face="bold"))+
+theme(axis.text.x=element_text(angle = 70,size=10, hjust = 1), axis.title=element_text(size=12,face="bold"))
+```
+
+\pagebreak
+
+**Metric** | **Vendor Name** | **Closure Rate**
+------------ | ------------- | -----------------
+Highest Closure Rate   | `r obj4$MaxMfr[obj4$Ident == ident]` | `r paste0(obj4$MaxPerc[obj4$Ident == ident], "%")`
+Lowest Closure Rate | `r obj4$MinMfr[obj4$Ident == ident]` | `r paste0(obj4$MinPerc[obj4$Ident == ident], "%")`
+
+**********
+
+
+# Avg Days to Deliver - L12W
+
+Days to deliver product following a Customer Service ticket has **`r if(is.infinite((mean(recent$CatDTD) - mean(old$CatDTD))/mean(old$CatDTD))) {'N/A'} else if(is.nan((mean(recent$CatDTD) - mean(old$CatDTD))/mean(old$CatDTD))) {'N/A'} else if(mean(recent$CatDTD) < mean(old$CatDTD)) {"decreased by"} else if (mean(recent$CatDTD) == mean(old$CatDTD)) {"not changed"} else {"increased by "}`** **`r if(is.nan(((mean(recent$CatDTD) - mean(old$CatDTD))/mean(old$CatDTD)))) {'N/A'} else if (((mean(recent$CatDTD) - mean(old$CatDTD))/mean(old$CatDTD)) == 0) {''} else {round(((mean(recent$CatDTD) - mean(old$CatDTD))/mean(old$CatDTD)),2)*100}`** **%** in the last 6 (six) weeks to **`r round(mean(recent$CatDTD),2)`** compared with the chain average of **`r round(mean(filter(obj2, Ident == ident)$ChainDTD),2)`** days.
+
+```{r fig.width=7, fig.height=4, echo=FALSE}
+avgline2 <- mean(filter(obj2, Ident == ident)$ChainDTD)
+
+filter(obj2, Ident == ident) %>% ggplot(aes(x = Weeks, y = CatDTD, label = CatDTD, group = 1))+
+geom_line(aes(color = "Days To Deliver")) +
+geom_point() + 
+geom_text(size=3,vjust = 0, nudge_y = .5) +
+geom_hline(yintercept = avgline2, color = "blue") +
+ggtitle("Avg Days to Deliver - L12W") + 
+ylab("Days") +
+labs(colour = "Metric") +
+theme(axis.text.y=element_text(size=10), axis.title=element_text(size=12,face="bold"))+
+theme(axis.text.x=element_text(angle = 70,size=10, hjust = 1), axis.title=element_text(size=12,face="bold"))
+```
+
+
+***************
+\pagebreak
+
+# Avg Days to Close a Ticket - L12W
+
+Ticket response times are **`r if (nrow(old) == 0) {"#N/A"} else if ((mean(recent$CatDTC)-mean(old$CatDTC))/mean(old$CatDTC) < 0) {"improving"} else if ((mean(recent$CatDTC)-mean(old$CatDTC))/mean(old$CatDTC) > 0) {"getting worse"} else {"stagnant"}`** in the most recent 6 weeks vs the prior 6 weeks. Average **`r unique(recent$Category)`** tickets have a response in approximately **`r round(mean(obj2$CatDTC[obj2$Ident == ident]),2)`** days over the past 12 weeks.
+
+Recent 6 Weeks Avg Days to Close: **`r round(mean(recent$CatDTC))`**     
+Prior 6 Weeks Avg Days to Close: **`r round(mean(old$CatDTC))`**
+
+```{r fig.width=7, fig.height=3.5, echo=FALSE}
+avgline3 <- mean(filter(obj2, Ident == ident)$ChainDTC)
+
+filter(obj2, Ident == ident) %>% ggplot(aes(x = Weeks, y = CatDTC, label = CatDTC, group = 1))+
+geom_line(aes(color = "Days To Close a Ticket")) +
+geom_point() + 
+geom_text(size=3,vjust = 0, nudge_y = .5) +
+geom_hline(yintercept = avgline3, color = "blue") +
+ggtitle("Avg Days to Close a Ticket - L12W") + 
+ylab("Days") +
+labs(colour = "Metric") +
+theme(axis.text.y=element_text(size=10), axis.title=element_text(size=12,face="bold"))+
+theme(axis.text.x=element_text(angle = 70,size=10, hjust = 1), axis.title=element_text(size=12,face="bold"))
+```
+
+********
+
+
+# Vendor Tickets Per Store
+
+```{r}
+reorder_size <- function(x) {
+  factor(x, levels = names(sort(table(x))))
+}
+```
+
+```{r fig.width = 7, fig.height = 3.5, echo = FALSE}
+filter(obj3, Ident == ident) %>% ggplot(aes(ManufacturerName, reorder_size(TicketCtPerSt)))+
+geom_bar(stat = "sum", fill = "blue") +
+  ggtitle("Vendor Ticket Ct Per Store - Past 12W") + 
+  ylab("Ticket Count Per Store") +
+  xlab("Manufacturer") +
+  labs(colour = "Metric") +
+  theme(axis.text.y=element_text(size=10), axis.title=element_text(size=12,face="bold"))+
+  theme(axis.text.x=element_text(angle = 70,size=10, hjust = 1), axis.title=element_text(size=12,face="bold"))+
+  theme(legend.position="none")
+```
